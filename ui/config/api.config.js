@@ -1,15 +1,21 @@
 // API Configuration for WiFi-DensePose UI
 
+// Auto-detect the backend URL from the page origin so the UI works whether
+// served from Docker (:3000), local dev (:8080), or any other port.
+const _origin = (typeof window !== 'undefined' && window.location && window.location.origin)
+  ? window.location.origin
+  : 'http://localhost:3000';
+
 export const API_CONFIG = {
-  BASE_URL: 'http://localhost:8000',  // FastAPI backend port
+  BASE_URL: _origin,
   API_VERSION: '/api/v1',
   WS_PREFIX: 'ws://',
   WSS_PREFIX: 'wss://',
-  
+
   // Mock server configuration (only for testing)
   MOCK_SERVER: {
     ENABLED: false,  // Set to true only for testing without backend
-    AUTO_DETECT: true,  // Automatically detect if backend is available
+    AUTO_DETECT: false,  // Disabled — sensing tab uses its own WebSocket on :8765
   },
   
   // API Endpoints
@@ -107,12 +113,16 @@ export function buildApiUrl(endpoint, params = {}) {
 
 // Helper function to build WebSocket URLs
 export function buildWsUrl(endpoint, params = {}) {
-  const protocol = window.location.protocol === 'https:' 
-    ? API_CONFIG.WSS_PREFIX 
+  // Match WebSocket protocol to page protocol: https → wss, http → ws.
+  // Previous logic forced wss:// on non-localhost HTTP, breaking LAN/Docker
+  // deployments served over plain HTTP. See issue #272.
+  const isSecure = window.location.protocol === 'https:';
+  const protocol = isSecure
+    ? API_CONFIG.WSS_PREFIX
     : API_CONFIG.WS_PREFIX;
-  
-  // Use localhost:8000 for WebSocket connections to match FastAPI backend
-  const host = 'localhost:8000';
+
+  // Derive host from the page origin so it works on any port (Docker :3000, dev :8080, etc.)
+  const host = window.location.host;
   let url = `${protocol}${host}${endpoint}`;
   
   // Add query parameters
